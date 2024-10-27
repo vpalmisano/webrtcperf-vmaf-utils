@@ -1,15 +1,16 @@
 extern crate ffmpeg_next as ffmpeg;
 
+use regex::Regex;
 use std::collections::HashMap;
 use std::time::Instant;
-use regex::Regex;
 
+use clap::Parser;
 use ffmpeg_next::{
-    codec, decoder, encoder, format, frame, log, media, picture, threading, Dictionary, Packet, Rational
+    codec, decoder, encoder, format, frame, log, media, picture, threading, Dictionary, Packet,
+    Rational,
 };
 use image::DynamicImage;
-use tesseract_rs::{TesseractAPI, TessPageSegMode};
-use clap::Parser;
+use tesseract_rs::{TessPageSegMode, TesseractAPI};
 
 struct Transcoder {
     ost_index: usize,
@@ -60,7 +61,10 @@ impl Transcoder {
             encoder.set_flags(codec::Flags::GLOBAL_HEADER);
         }
 
-        let encoder_opts = parse_opts("quality=best,cpu-used=0,crf=1,qmin=1,qmax=10,kf-min-dist=1,kf-max-dist=1".to_owned()).unwrap();
+        let encoder_opts = parse_opts(
+            "quality=best,cpu-used=0,crf=1,qmin=1,qmax=10,kf-min-dist=1,kf-max-dist=1".to_owned(),
+        )
+        .unwrap();
         let opened_encoder = encoder
             .open_with(encoder_opts)
             .expect("error opening encoder with supplied settings");
@@ -68,8 +72,12 @@ impl Transcoder {
 
         let tesseract = TesseractAPI::new();
         tesseract.init(tesseract_path, "eng").unwrap();
-        tesseract.set_variable("tessedit_char_whitelist", "0123456789-").unwrap();
-        tesseract.set_page_seg_mode(TessPageSegMode::PSM_SINGLE_LINE).unwrap();
+        tesseract
+            .set_variable("tessedit_char_whitelist", "0123456789-")
+            .unwrap();
+        tesseract
+            .set_page_seg_mode(TessPageSegMode::PSM_SINGLE_LINE)
+            .unwrap();
 
         Ok(Self {
             ost_index,
@@ -131,29 +139,44 @@ impl Transcoder {
                 )
                 .expect("Failed to create RgbImage from raw data"),
             );
-            let image = image.crop_imm(0, 0, image.width(), 
-                (image.height() as f32 / 15f32) as u32);
+            let image = image.crop_imm(0, 0, image.width(), (image.height() as f32 / 15f32) as u32);
 
-            self.tesseract.set_image(&image.to_rgb8(), image.width() as i32, image.height() as i32, 
-                3i32, 3i32 * frame.width() as i32).unwrap();
+            self.tesseract
+                .set_image(
+                    &image.to_rgb8(),
+                    image.width() as i32,
+                    image.height() as i32,
+                    3i32,
+                    3i32 * frame.width() as i32,
+                )
+                .unwrap();
             let output = self.tesseract.get_utf8_text().unwrap();
 
-            if ! self.frame_re.captures(&output.trim()).map_or_else(|| {
-                println!("failed to recognize: {:?}", output.trim());
-                false
-            }, |c| {
-                let id: i32 = c["id"].parse().unwrap();
-                let time: f64 = c["time"].parse().unwrap_or(0f64) / 1000f64;
-                let pts_new = (time / f64::from(self.input_time_base)) as i64;
-                if cfg!(debug_assertions) {
-                    println!("  pts={:?} id={:?} time={:?} pts_new={:?}", frame.pts(), id, time, pts_new);
-                }
-                frame.set_pts(Some(pts_new));
-                frame.set_kind(picture::Type::I);
-                self.send_frame_to_encoder(&frame);
-                self.receive_and_process_encoded_packets(octx, ost_time_base);
-                true
-            }) {
+            if !self.frame_re.captures(output.trim()).map_or_else(
+                || {
+                    println!("failed to recognize: {:?}", output.trim());
+                    false
+                },
+                |c| {
+                    let id: i32 = c["id"].parse().unwrap();
+                    let time: f64 = c["time"].parse().unwrap_or(0f64) / 1000f64;
+                    let pts_new = (time / f64::from(self.input_time_base)) as i64;
+                    if cfg!(debug_assertions) {
+                        println!(
+                            "  pts={:?} id={:?} time={:?} pts_new={:?}",
+                            frame.pts(),
+                            id,
+                            time,
+                            pts_new
+                        );
+                    }
+                    frame.set_pts(Some(pts_new));
+                    frame.set_kind(picture::Type::I);
+                    self.send_frame_to_encoder(&frame);
+                    self.receive_and_process_encoded_packets(octx, ost_time_base);
+                    true
+                },
+            ) {
                 self.failed_frames += 1;
             }
         }
@@ -189,9 +212,7 @@ impl Transcoder {
         }
         eprintln!(
             "frame: {} timestamp: {:.2} failed frames: {}",
-            self.frame_count,
-            timestamp,
-            self.failed_frames,
+            self.frame_count, timestamp, self.failed_frames,
         );
         self.last_log_frame_count = self.frame_count;
         self.last_log_time = Instant::now();
@@ -224,7 +245,10 @@ struct Args {
 }
 fn main() {
     let args = Args::parse();
-    let output_file = Regex::new(r"(\..+)$").unwrap().replace(&args.process_file, ".ivf").to_string();
+    let output_file = Regex::new(r"(\..+)$")
+        .unwrap()
+        .replace(&args.process_file, ".ivf")
+        .to_string();
     println!("processing: {} -> {}", args.process_file, output_file);
 
     // Initialize ffmpeg.
