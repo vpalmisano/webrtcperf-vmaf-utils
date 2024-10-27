@@ -1,7 +1,6 @@
 extern crate ffmpeg_next as ffmpeg;
 
 use std::collections::HashMap;
-use std::env;
 use std::time::Instant;
 use regex::Regex;
 
@@ -10,6 +9,7 @@ use ffmpeg_next::{
 };
 use image::DynamicImage;
 use tesseract_rs::{TesseractAPI, TessPageSegMode};
+use clap::Parser;
 
 struct Transcoder {
     ost_index: usize,
@@ -70,7 +70,6 @@ impl Transcoder {
         let tesseract = TesseractAPI::new();
         tesseract.init(tesseract_path, "eng").unwrap();
         tesseract.set_variable("tessedit_char_whitelist", "0123456789-").unwrap();
-        tesseract.set_source_resolution(100).unwrap();
         tesseract.set_page_seg_mode(TessPageSegMode::PSM_SINGLE_LINE).unwrap();
 
         Ok(Self {
@@ -136,7 +135,7 @@ impl Transcoder {
             );
             let image = image.crop_imm(0, 0, image.width(), 
                 (image.height() as f32 / 15f32) as u32);
-                       
+
             self.tesseract.set_image(&image.to_rgb8(), image.width() as i32, image.height() as i32, 
                 3i32, 3i32 * frame.width() as i32).unwrap();
             let output = self.tesseract.get_utf8_text().unwrap();
@@ -191,10 +190,10 @@ impl Transcoder {
             return;
         }
         eprintln!(
-            "time elapsed: \t{:8.2}\tframe count: {:8}\ttimestamp: {:8.2}",
-            self.starting_time.elapsed().as_secs_f64(),
+            "frame: {} timestamp: {:.2} failed frames: {}",
             self.frame_count,
-            timestamp
+            timestamp,
+            self.failed_frames,
         );
         self.last_log_frame_count = self.frame_count;
         self.last_log_time = Instant::now();
@@ -213,13 +212,22 @@ fn parse_opts<'a>(s: String) -> Option<Dictionary<'a>> {
     Some(dict)
 }
 
+/// Utility for processing real time videos for VMAF evaluation.
+#[derive(Parser, Debug)]
+#[command(version, about, long_about = None)]
+struct Args {
+    /// The video file to process.
+    #[arg(short, long)]
+    process_file: String,
+
+    /// The tesseract data path (optional).
+    #[arg(short, long, default_value_t = String::from("/usr/share/tesseract-ocr/5/tessdata"))]
+    tesseract_path: String,
+}
 fn main() {
-    let input_file = env::args().nth(1).expect("missing input file");
-
-    let output_file = Regex::new(r"(\..+)$").unwrap().replace(&input_file, ".ivf").to_string();
-    println!("processing: {} -> {}", input_file, output_file);
-
-    let tesseract_path = env::args().nth(3).unwrap_or("/usr/share/tesseract-ocr/5/tessdata".to_string());
+    let args = Args::parse();
+    let output_file = Regex::new(r"(\..+)$").unwrap().replace(&args.process_file, ".ivf").to_string();
+    println!("processing: {} -> {}", args.process_file, output_file);
 
     // Initialize ffmpeg.
     if let Err(e) = ffmpeg::init() {
@@ -228,7 +236,7 @@ fn main() {
     }
     log::set_level(log::Level::Info);
 
-    let mut ictx = match format::input(&input_file) {
+    let mut ictx = match format::input(&args.process_file) {
         Ok(context) => context,
         Err(e) => {
             eprintln!("Failed to open input file: {}", e);
@@ -243,7 +251,7 @@ fn main() {
         }
     };
 
-    format::context::input::dump(&ictx, 0, Some(&input_file));
+    //format::context::input::dump(&ictx, 0, Some(&args.process_file));
 
     let best_video_stream_index = ictx
         .streams()
@@ -273,7 +281,7 @@ fn main() {
                     &ist,
                     &mut octx,
                     ost_index as _,
-                    &tesseract_path,
+                    &args.tesseract_path,
                     Some(ist_index) == best_video_stream_index,
                 )
                 .unwrap(),
@@ -293,7 +301,7 @@ fn main() {
     }
 
     octx.set_metadata(ictx.metadata().to_owned());
-    format::context::output::dump(&octx, 0, Some(&output_file));
+    // format::context::output::dump(&octx, 0, Some(&output_file));
     let mut movflags_opts = Dictionary::new();
     movflags_opts.set("movflags", "faststart");
     octx.write_header_with(movflags_opts).unwrap();
