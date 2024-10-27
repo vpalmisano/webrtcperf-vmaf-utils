@@ -1,0 +1,12 @@
+[package]
+name = "webrtcperf-vmaf-utils"
+description = "Utility for processing real time videos for VMAF evaluation"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+ffmpeg-next = "7.1.0"
+regex = "1.11.1"
+chrono = "0.4"
+tesseract-rs = "0.1.18"
+image = "0.25.4"
