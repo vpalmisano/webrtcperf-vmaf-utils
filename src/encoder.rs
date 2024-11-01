@@ -5,22 +5,26 @@ use crate::transcoder::Transcoder;
 
 use ffmpeg::Dictionary;
 use ffmpeg::{format, media, Rational};
+use log::debug;
 use regex::Regex;
 use std::collections::HashMap;
-use log::debug;
 
-pub fn watermark_video(input_file: &str) -> Result<(), Box<dyn std::error::Error>> {
-    ffmpeg_encoder(input_file, true, false)
+pub fn watermark_video(
+    input_file: &str,
+    watermark_id: &str,
+) -> Result<(), Box<dyn std::error::Error>> {
+    ffmpeg_encoder(input_file, true, false, Some(watermark_id))
 }
 
 pub fn process_video(input_file: &str) -> Result<(), Box<dyn std::error::Error>> {
-    ffmpeg_encoder(input_file, false, true)
+    ffmpeg_encoder(input_file, false, true, None)
 }
 
 fn ffmpeg_encoder(
     input_file: &str,
     with_watermark: bool,
     with_recognition: bool,
+    watermark_id: Option<&str>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     debug!(
         "ffmpeg_encoder: {} with_watermark: {} with_recognition: {}",
@@ -31,9 +35,9 @@ fn ffmpeg_encoder(
         .unwrap()
         .replace(input_file, replacement)
         .to_string();
-    if std::path::Path::new(&output_file).exists() {
+    /* if std::path::Path::new(&output_file).exists() {
         return Err(format!("output file {} already exists", output_file).into());
-    }
+    } */
 
     ffmpeg::init()?;
     ffmpeg::log::set_level(ffmpeg::log::Level::Info);
@@ -68,6 +72,7 @@ fn ffmpeg_encoder(
                 Some(ist_index) == best_video_stream_index,
                 with_watermark,
                 with_recognition,
+                watermark_id,
             )?,
         );
         ost_index += 1;
@@ -105,8 +110,23 @@ fn ffmpeg_encoder(
 
     octx.write_trailer()?;
 
-    if let Some(transcoder) = transcoders.values().next() {
-        debug!("ffmpeg_encoder done (failed: {})", transcoder.failed_frames());
+    if with_recognition {
+        if let Some(transcoder) = transcoders.values().next() {
+            let id = transcoder.recognized_id();
+            debug!(
+                "ffmpeg_encoder done id: {} failed: {}",
+                id.unwrap_or(&"none".to_string()),
+                transcoder.failed_frames()
+            );
+            if let Some(id) = id {
+                let new_output_file = Regex::new(r"(\..+)$")
+                    .unwrap()
+                    .replace(&input_file, format!(".{}.ivf", id))
+                    .to_string();
+                std::fs::rename(&output_file, &new_output_file)?;
+                debug!("Output file renamed to: {}", new_output_file);
+            }
+        }
     }
 
     Ok(())

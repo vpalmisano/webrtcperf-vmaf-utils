@@ -77,6 +77,7 @@ pub struct Transcoder {
     failed_frames: usize,
     watermark_filter: Option<VideoFilter>,
     tesseract: Option<TesseractAPI>,
+    recognized_id: Option<String>,
 }
 
 impl Transcoder {
@@ -87,10 +88,13 @@ impl Transcoder {
         enable_logging: bool,
         with_watermark: bool,
         with_recognition: bool,
+        watermark_id: Option<&str>,
     ) -> Result<Self, ffmpeg::Error> {
         debug!(
-            "Transcoder with_watermark: {} with_recognition: {}",
-            with_watermark, with_recognition
+            "Transcoder watermark: {} recognition: {} watermark_id: {}",
+            with_watermark,
+            with_recognition,
+            watermark_id.unwrap_or("")
         );
 
         let global_header = octx.format().flags().contains(format::Flags::GLOBAL_HEADER);
@@ -132,7 +136,8 @@ impl Transcoder {
         let watermark_filter = if with_watermark {
             let text_height = (decoder.height() as f32 / 15.0).round() as i32;
             let font_size = (decoder.height() as f32 / 18.0).round() as i32;
-            let id = "1";
+            let id = watermark_id.unwrap_or("1");
+            let id = if id.is_empty() { "1" } else { id };
             let watermark_filter = VideoFilter::new(ist, &decoder, format!("\
 drawbox=x=0:y=0:w=iw:h={text_height}:color=black:t=fill,\
 drawtext=fontfile=/usr/share/fonts/truetype/noto/NotoMono-Regular.ttf:text='{id}-%{{eif\\:t*1000\\:u}}'\
@@ -191,6 +196,7 @@ drawtext=fontfile=/usr/share/fonts/truetype/noto/NotoMono-Regular.ttf:text='{id}
             failed_frames: 0,
             watermark_filter,
             tesseract,
+            recognized_id: None::<String>,
         })
     }
 
@@ -273,6 +279,7 @@ drawtext=fontfile=/usr/share/fonts/truetype/noto/NotoMono-Regular.ttf:text='{id}
                                     pts_new
                                 );
                             }
+                            self.recognized_id = Some(c["id"].to_string());
                             frame.set_pts(Some(pts_new));
                             self.send_frame_to_encoder(&frame);
                             self.receive_and_process_encoded_packets(octx, ost_time_base);
@@ -333,6 +340,10 @@ drawtext=fontfile=/usr/share/fonts/truetype/noto/NotoMono-Regular.ttf:text='{id}
 
     pub fn failed_frames(&self) -> usize {
         self.failed_frames
+    }
+
+    pub fn recognized_id(&self) -> Option<&String> {
+        self.recognized_id.as_ref()
     }
 }
 

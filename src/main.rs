@@ -10,6 +10,10 @@ struct Args {
     #[arg(short, long, default_value_t = String::new())]
     watermark: String,
 
+    /// The id to write on the watermark
+    #[arg(long, default_value_t = String::new())]
+    watermark_id: String,
+
     /// When set, the video will be processed recognizing the timestamp overlay and setting the frames pts accordingly
     #[arg(short, long, default_value_t = String::new())]
     process: String,
@@ -20,7 +24,7 @@ fn main() {
 
     if !args.watermark.is_empty() {
         println!("watermark video: {}", args.watermark);
-        if let Err(e) = watermark_video(&args.watermark) {
+        if let Err(e) = watermark_video(&args.watermark, &args.watermark_id) {
             eprintln!("Error watermarking video: {}", e);
         }
     } else if !args.process.is_empty() {
