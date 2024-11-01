@@ -150,7 +150,7 @@ drawtext=fontfile=/usr/share/fonts/truetype/noto/NotoMono-Regular.ttf:text='{id}
         };
 
         let tesseract = if with_recognition {
-            println!("Initializing Tesseract");
+            debug!("Initializing Tesseract");
             // Initialize Tesseract
             let home_dir = std::env::var("HOME").expect("Failed to get home directory");
             let tesseract_dir = format!("{}/.webrtcperf/cache", home_dir);
@@ -159,6 +159,7 @@ drawtext=fontfile=/usr/share/fonts/truetype/noto/NotoMono-Regular.ttf:text='{id}
             let tesseract_path = format!("{}/eng.traineddata", tesseract_dir);
             if !std::path::Path::new(&tesseract_path).exists() {
                 // Download the file from the URL
+                debug!("Downloading Tesseract data file");
                 let response = reqwest::blocking::get(
                     "https://cdn.jsdelivr.net/npm/@tesseract.js-data/eng/4.0.0/eng.traineddata.gz",
                 )
@@ -330,7 +331,7 @@ drawtext=fontfile=/usr/share/fonts/truetype/noto/NotoMono-Regular.ttf:text='{id}
         {
             return;
         }
-        eprintln!(
+        debug!(
             "[{}/{}] {:.2}s (failed: {})",
             self.frame_count, self.total_frames, timestamp, self.failed_frames,
         );
