@@ -2443,8 +2443,10 @@ dependencies = [
  "chrono",
  "clap",
  "ffmpeg-next",
+ "flate2",
  "image",
  "regex",
+ "reqwest",
  "tesseract-rs",
 ]
 
