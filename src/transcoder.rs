@@ -5,6 +5,7 @@ use ffmpeg_next::{
 };
 use flate2::read::GzDecoder;
 use image::DynamicImage;
+use log::debug;
 use regex::Regex;
 use std::time::Instant;
 use tesseract_rs::{TessPageSegMode, TesseractAPI};
@@ -87,6 +88,11 @@ impl Transcoder {
         with_watermark: bool,
         with_recognition: bool,
     ) -> Result<Self, ffmpeg::Error> {
+        debug!(
+            "Transcoder with_watermark: {} with_recognition: {}",
+            with_watermark, with_recognition
+        );
+
         let global_header = octx.format().flags().contains(format::Flags::GLOBAL_HEADER);
         let decoder = codec::context::Context::from_parameters(ist.parameters())?
             .decoder()
@@ -323,6 +329,10 @@ drawtext=fontfile=/usr/share/fonts/truetype/noto/NotoMono-Regular.ttf:text='{id}
         );
         self.last_log_frame_count = self.frame_count;
         self.last_log_time = Instant::now();
+    }
+
+    pub fn failed_frames(&self) -> usize {
+        self.failed_frames
     }
 }
 

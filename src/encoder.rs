@@ -1,11 +1,13 @@
 extern crate ffmpeg_next as ffmpeg;
-
-use ffmpeg::Dictionary;
-use ffmpeg_next::{format, log, media, Rational};
-use regex::Regex;
-use std::collections::HashMap;
+mod transcoder;
 
 use crate::transcoder::Transcoder;
+
+use ffmpeg::Dictionary;
+use ffmpeg::{format, media, Rational};
+use regex::Regex;
+use std::collections::HashMap;
+use log::debug;
 
 pub fn watermark_video(input_file: &str) -> Result<(), Box<dyn std::error::Error>> {
     ffmpeg_encoder(input_file, true, false)
@@ -20,6 +22,10 @@ fn ffmpeg_encoder(
     with_watermark: bool,
     with_recognition: bool,
 ) -> Result<(), Box<dyn std::error::Error>> {
+    debug!(
+        "ffmpeg_encoder: {} with_watermark: {} with_recognition: {}",
+        input_file, with_watermark, with_recognition
+    );
     let replacement = if with_watermark { ".w.ivf" } else { ".r.ivf" };
     let output_file = Regex::new(r"(\..+)$")
         .unwrap()
@@ -30,7 +36,7 @@ fn ffmpeg_encoder(
     }
 
     ffmpeg::init()?;
-    log::set_level(log::Level::Info);
+    ffmpeg::log::set_level(ffmpeg::log::Level::Info);
 
     let mut ictx = format::input(input_file)?;
     let mut octx = format::output(&output_file)?;
@@ -98,5 +104,10 @@ fn ffmpeg_encoder(
     }
 
     octx.write_trailer()?;
+
+    if let Some(transcoder) = transcoders.values().next() {
+        debug!("ffmpeg_encoder done (failed: {})", transcoder.failed_frames());
+    }
+
     Ok(())
 }
