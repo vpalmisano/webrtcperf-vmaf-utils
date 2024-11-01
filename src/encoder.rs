@@ -3,6 +3,7 @@ mod transcoder;
 
 use crate::transcoder::Transcoder;
 
+use crossbeam_channel::Receiver;
 use ffmpeg::Dictionary;
 use ffmpeg::{format, media, Rational};
 use log::debug;
@@ -12,12 +13,16 @@ use std::collections::HashMap;
 pub fn watermark_video(
     input_file: &str,
     watermark_id: &str,
+    receiver: Receiver<&str>,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    ffmpeg_encoder(input_file, true, false, Some(watermark_id))
+    ffmpeg_encoder(input_file, true, false, Some(watermark_id), receiver)
 }
 
-pub fn process_video(input_file: &str) -> Result<(), Box<dyn std::error::Error>> {
-    ffmpeg_encoder(input_file, false, true, None)
+pub fn process_video(
+    input_file: &str,
+    receiver: Receiver<&str>,
+) -> Result<(), Box<dyn std::error::Error>> {
+    ffmpeg_encoder(input_file, false, true, None, receiver)
 }
 
 fn ffmpeg_encoder(
@@ -25,12 +30,13 @@ fn ffmpeg_encoder(
     with_watermark: bool,
     with_recognition: bool,
     watermark_id: Option<&str>,
+    receiver: Receiver<&str>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     debug!(
         "ffmpeg_encoder: {} with_watermark: {} with_recognition: {}",
         input_file, with_watermark, with_recognition
     );
-    let replacement = if with_watermark { ".w.ivf" } else { ".r.ivf" };
+    let replacement = if with_watermark { ".ivf" } else { ".r.ivf" };
     let output_file = Regex::new(r"(\..+)$")
         .unwrap()
         .replace(input_file, replacement)
@@ -40,7 +46,11 @@ fn ffmpeg_encoder(
     } */
 
     ffmpeg::init()?;
-    ffmpeg::log::set_level(ffmpeg::log::Level::Info);
+    if cfg!(debug_assertions) {
+        ffmpeg::log::set_level(ffmpeg::log::Level::Verbose);
+    } else {
+        ffmpeg::log::set_level(ffmpeg::log::Level::Info);
+    }
 
     let mut ictx = format::input(input_file)?;
     let mut octx = format::output(&output_file)?;
@@ -97,7 +107,17 @@ fn ffmpeg_encoder(
         let transcoder = transcoders.get_mut(&ist_index).unwrap();
         transcoder.send_packet_to_decoder(&packet);
         transcoder.receive_and_process_decoded_frames(&mut octx, ost_time_base);
+
+        match receiver.try_recv() {
+            Ok("stop") => {
+                debug!("ffmpeg_encoder stop received");
+                break;
+            }
+            _ => {}
+        }
     }
+
+    debug!("ffmpeg_encoder flushing");
 
     // Flush encoders and decoders.
     for (ost_index, transcoder) in transcoders.iter_mut() {
