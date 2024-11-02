@@ -134,16 +134,38 @@ impl Transcoder {
         ost.set_parameters(&opened_encoder);
 
         let watermark_filter = if with_watermark {
+            let home_dir = std::env::var("HOME").expect("Failed to get home directory");
+            let font_path = format!("{}/.webrtcperf/cache/NotoMono-Regular.ttf", home_dir);
+            if !std::path::Path::new(&font_path).exists() {
+                // Download the file from the URL
+                debug!("Downloading font file");
+                let mut response = reqwest::blocking::get(
+                    "https://cdn.jsdelivr.net/npm/@typopro/web-noto@3.7.5/TypoPRO-NotoMono-Regular.ttf",
+                )
+                .expect("Failed to download font file");
+                let mut file =
+                    std::fs::File::create(&font_path).expect("Failed to create font file");
+                std::io::copy(&mut response, &mut file).expect("Failed to write font file");
+            }
             let text_height = (decoder.height() as f32 / 15.0).round() as i32;
             let font_size = (decoder.height() as f32 / 18.0).round() as i32;
             let id = watermark_id.unwrap_or("1");
             let id = if id.is_empty() { "1" } else { id };
-            let watermark_filter = VideoFilter::new(ist, &decoder, format!("\
+            let watermark_filter = VideoFilter::new(
+                ist,
+                &decoder,
+                format!(
+                    "\
 drawbox=x=0:y=0:w=iw:h={text_height}:color=black:t=fill,\
-drawtext=fontfile=/usr/share/fonts/truetype/noto/NotoMono-Regular.ttf:text='{id}-%{{eif\\:t*1000\\:u}}'\
-:fontcolor=white:fontsize={font_size}:x=(w-text_w)/2:y=({text_height}-text_h)/2", 
-                    text_height = text_height, id = id, font_size = font_size))
-                .expect("Failed to create watermark filter");
+drawtext=fontfile={font_path}:text='{id}-%{{eif\\:t*1000\\:u}}'\
+:fontcolor=white:fontsize={font_size}:x=(w-text_w)/2:y=({text_height}-text_h)/2",
+                    text_height = text_height,
+                    id = id,
+                    font_path = font_path,
+                    font_size = font_size
+                ),
+            )
+            .expect("Failed to create watermark filter");
             Some(watermark_filter)
         } else {
             None
