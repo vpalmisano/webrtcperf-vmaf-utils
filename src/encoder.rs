@@ -32,15 +32,15 @@ fn ffmpeg_encoder(
     watermark_id: Option<&str>,
     receiver: Receiver<&str>,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    debug!(
-        "ffmpeg_encoder: {} with_watermark: {} with_recognition: {}",
-        input_file, with_watermark, with_recognition
-    );
-    let replacement = if with_watermark { ".ivf" } else { ".r.ivf" };
-    let output_file = Regex::new(r"(\..+)$")
+    let replacement = if with_watermark { "$1.ivf" } else { "$1.r.ivf" };
+    let output_file = Regex::new(r"(^.+)\.\w+$")
         .unwrap()
         .replace(input_file, replacement)
         .to_string();
+    debug!(
+        "ffmpeg_encoder: {} -> {} watermark: {} recognition: {}",
+        input_file, output_file, with_watermark, with_recognition
+    );
     /* if std::path::Path::new(&output_file).exists() {
         return Err(format!("output file {} already exists", output_file).into());
     } */

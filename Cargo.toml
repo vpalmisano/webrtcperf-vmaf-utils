@@ -12,7 +12,7 @@ bench = false
 [lib]
 name = "webrtcperf_vmaf_utils"
 path = "src/encoder.rs"
-crate-type = ["cdylib", "lib"]
+crate-type = ["lib"]
 bench = false
 
 [dependencies]
