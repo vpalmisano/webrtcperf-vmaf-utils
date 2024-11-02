@@ -9,37 +9,38 @@ use ffmpeg::{format, media, Rational};
 use log::debug;
 use regex::Regex;
 use std::collections::HashMap;
+use transcoder::Mode;
 
 pub fn watermark_video(
     input_file: &str,
     watermark_id: &str,
     receiver: Receiver<&str>,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    ffmpeg_encoder(input_file, true, false, Some(watermark_id), receiver)
+    ffmpeg_encoder(input_file, Mode::Watermark, Some(watermark_id), receiver)
 }
 
 pub fn process_video(
     input_file: &str,
     receiver: Receiver<&str>,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    ffmpeg_encoder(input_file, false, true, None, receiver)
+    ffmpeg_encoder(input_file, Mode::Process, None, receiver)
 }
 
 fn ffmpeg_encoder(
     input_file: &str,
-    with_watermark: bool,
-    with_recognition: bool,
+    mode: Mode,
     watermark_id: Option<&str>,
     receiver: Receiver<&str>,
 ) -> Result<(), Box<dyn std::error::Error>> {
+    let with_watermark = matches!(mode, Mode::Watermark);
     let replacement = if with_watermark { "$1.ivf" } else { "$1.r.ivf" };
     let output_file = Regex::new(r"(^.+)\.\w+$")
         .unwrap()
         .replace(input_file, replacement)
         .to_string();
     debug!(
-        "ffmpeg_encoder: {} -> {} watermark: {} recognition: {}",
-        input_file, output_file, with_watermark, with_recognition
+        "ffmpeg_encoder: {} -> {} mode: {:?}",
+        input_file, output_file, mode
     );
     /* if std::path::Path::new(&output_file).exists() {
         return Err(format!("output file {} already exists", output_file).into());
@@ -80,8 +81,7 @@ fn ffmpeg_encoder(
                 &mut octx,
                 ost_index as _,
                 Some(ist_index) == best_video_stream_index,
-                with_watermark,
-                with_recognition,
+                &mode,
                 watermark_id,
             )?,
         );
@@ -130,7 +130,7 @@ fn ffmpeg_encoder(
 
     octx.write_trailer()?;
 
-    if with_recognition {
+    if matches!(mode, Mode::Process) {
         if let Some(transcoder) = transcoders.values().next() {
             let id = transcoder.recognized_id();
             debug!(

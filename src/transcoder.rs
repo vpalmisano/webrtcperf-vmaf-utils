@@ -63,6 +63,12 @@ impl VideoFilter {
     }
 }
 
+#[derive(Debug)]
+pub enum Mode {
+    Watermark,
+    Process,
+}
+
 pub struct Transcoder {
     ost_index: usize,
     decoder: decoder::Video,
@@ -86,14 +92,12 @@ impl Transcoder {
         octx: &mut format::context::Output,
         ost_index: usize,
         enable_logging: bool,
-        with_watermark: bool,
-        with_recognition: bool,
+        mode: &Mode,
         watermark_id: Option<&str>,
     ) -> Result<Self, ffmpeg::Error> {
         debug!(
-            "Transcoder watermark: {} recognition: {} watermark_id: {}",
-            with_watermark,
-            with_recognition,
+            "Transcoder mode: {:?} watermark_id: {}",
+            mode,
             watermark_id.unwrap_or("")
         );
 
@@ -133,7 +137,7 @@ impl Transcoder {
             .expect("error opening encoder with supplied settings");
         ost.set_parameters(&opened_encoder);
 
-        let watermark_filter = if with_watermark {
+        let watermark_filter = if matches!(mode, Mode::Watermark) {
             let home_dir = std::env::var("HOME").expect("Failed to get home directory");
             let font_path = format!("{}/.webrtcperf/cache/NotoMono-Regular.ttf", home_dir);
             if !std::path::Path::new(&font_path).exists() {
@@ -171,7 +175,7 @@ drawtext=fontfile={font_path}:text='{id}-%{{eif\\:t*1000\\:u}}'\
             None
         };
 
-        let tesseract = if with_recognition {
+        let tesseract = if matches!(mode, Mode::Process) {
             debug!("Initializing Tesseract");
             // Initialize Tesseract
             let home_dir = std::env::var("HOME").expect("Failed to get home directory");
